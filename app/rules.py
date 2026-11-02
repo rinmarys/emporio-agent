@@ -44,6 +44,52 @@ def availability(status: str, stock: int) -> str:
     return "disponível"
 
 
+PIX_DISCOUNT_PERCENT = 5
+COMBINED_PAYMENT_MIN_BRL = 2000
+SELLABLE = {"disponível", "últimas unidades"}
+
+
+def discounted(price: float, percent: float) -> float:
+    return round(price * (1 - percent / 100), 2)
+
+
+def min_installment(n: int) -> int:
+    """Manual 3.1 bands (D8-3: up to 3x assumes R$50 minimum)."""
+    return 50 if n <= 3 else 80 if n <= 6 else 100
+
+
+def payment_options(price: float, is_promotional: bool) -> dict:
+    """PIX, debit, boleto and credit installments for one price (manual 3 and 6.2)."""
+    installments = [
+        {"installments": n, "installment_value": round(price / n, 2)}
+        for n in range(1, 13)
+        if price / n >= min_installment(n)
+    ]
+    return {
+        "price_brl": price,
+        # PIX discount is not cumulative with promotions (manual 6.2)
+        "pix": {
+            "price_brl": price if is_promotional else discounted(price, PIX_DISCOUNT_PERCENT),
+            "discount_percent": 0 if is_promotional else PIX_DISCOUNT_PERCENT,
+        },
+        "debit": {"price_brl": price},
+        "boleto": {"price_brl": price, "note": "compensação em até 3 dias úteis"},
+        "credit_card": {
+            "max_installments": installments[-1]["installments"] if installments else 0,
+            "options": installments,
+            "interest": "sem juros",
+        },
+        "combined_payment_allowed": price > COMBINED_PAYMENT_MIN_BRL,
+    }
+
+
+def needs_human(status: str, estimated_delivery, today) -> bool:
+    """Late order still open (D8-8): agent must not invent a reason, team takes over."""
+    if status in ("delivered", "cancelled") or not estimated_delivery:
+        return False
+    return estimated_delivery < today
+
+
 def order_status_pt(status: str) -> str:
     return ORDER_STATUS_PT.get(status, status)
 
