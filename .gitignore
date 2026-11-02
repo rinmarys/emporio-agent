@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project
+*.db
+.files/
+CLAUDE.md
+.chainlit/translations/*
+!.chainlit/translations/pt-BR.json
