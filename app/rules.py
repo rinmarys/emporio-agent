@@ -3,7 +3,7 @@
 LOW_STOCK_LIMIT = 3  # D8-4b: documented assumption, 1..3 units = "últimas unidades"
 
 # Contacts per D8-1 (general phone/WhatsApp + customer service WhatsApp).
-# shortcut: contacts duplicated from the policy manual, read them from get_store_policy once T03 exists.
+# shortcut: contacts duplicated from knowledge/policies.md (topic "contato"); update both if they change.
 UNKNOWN_AVAILABILITY = (
     "não consegui confirmar a disponibilidade deste produto agora; "
     "fale com a nossa equipe pelo WhatsApp (67) 3321-4500 ou pelo telefone (67) 3341-4444"
