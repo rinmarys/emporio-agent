@@ -1,12 +1,14 @@
 """The agent: model + tools + prompt + per-conversation memory (D1, D2, D6).
 
-Interfaces only call ask(message, thread_id).
+Interfaces only call ask(message, thread_id), or stream(...) for chat UIs that show steps.
 """
 
 import logging
 from functools import cache
 
 from langchain.agents import create_agent
+from langchain.agents.middleware import ModelFallbackMiddleware
+from langchain_core.messages import AIMessageChunk
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.errors import GraphRecursionError
 
@@ -32,9 +34,9 @@ LOOP_MESSAGE = (
 )
 
 
-def build_model(provider: str = config.LLM_PROVIDER):
+def build_model(provider: str = config.LLM_PROVIDER, max_retries: int = 2):
     """Chat model for the configured provider; switching is one .env variable (D2)."""
-    common = {"temperature": TEMPERATURE, "timeout": 60, "max_retries": 2}
+    common = {"temperature": TEMPERATURE, "timeout": 60, "max_retries": max_retries}
     if provider == "gemini":
         if not config.GOOGLE_API_KEY:
             raise RuntimeError("GOOGLE_API_KEY is missing in .env")
@@ -54,7 +56,44 @@ def build_model(provider: str = config.LLM_PROVIDER):
 def get_agent():
     """Built once per process. MemorySaver keeps each thread_id's history in RAM (D6)."""
     get_products()  # load the CSVs at startup, not on the first customer question
-    return create_agent(build_model(), tools=TOOLS, system_prompt=SYSTEM_PROMPT, checkpointer=MemorySaver())
+    other = "gemini" if config.LLM_PROVIDER == "groq" else "groq"
+    other_key = config.GOOGLE_API_KEY if other == "gemini" else config.GROQ_API_KEY
+    if not other_key:
+        return create_agent(build_model(), tools=TOOLS, system_prompt=SYSTEM_PROMPT, checkpointer=MemorySaver())
+    # Free tiers hit 429 often: fail fast on the main provider and switch to the other one,
+    # instead of waiting up to ~40s for the main provider's retry.
+    return create_agent(
+        build_model(max_retries=0),
+        tools=TOOLS,
+        system_prompt=SYSTEM_PROMPT,
+        checkpointer=MemorySaver(),
+        middleware=[ModelFallbackMiddleware(build_model(other))],
+    )
+
+
+async def stream(message: str, thread_id: str):
+    """Async version of ask for chat UIs. Yields ("tool", {"name", "args"}) when a tool is called and
+    ("text", chunk) while the reply is generated. Never raises to the interface."""
+    config_ = {"configurable": {"thread_id": thread_id}, "recursion_limit": RECURSION_LIMIT}
+    try:
+        async for mode, data in get_agent().astream(
+            {"messages": [{"role": "user", "content": message}]}, config_, stream_mode=["updates", "messages"]
+        ):
+            if mode == "updates":
+                for update in data.values():
+                    for msg in (update or {}).get("messages", []):
+                        for call in getattr(msg, "tool_calls", None) or []:
+                            yield "tool", {"name": call["name"], "args": call["args"]}
+            else:
+                chunk, meta = data
+                if meta.get("langgraph_node") == "model" and isinstance(chunk, AIMessageChunk) and chunk.text:
+                    yield "text", chunk.text
+    except GraphRecursionError:
+        logger.warning("Recursion limit hit for thread %s", thread_id)
+        yield "text", LOOP_MESSAGE
+    except Exception:
+        logger.exception("Agent stream failed for thread %s", thread_id)
+        yield "text", ERROR_MESSAGE
 
 
 def ask(message: str, thread_id: str) -> str:

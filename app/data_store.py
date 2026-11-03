@@ -1,6 +1,7 @@
 """Data repository: loads the CSVs once and joins them. No business decisions here."""
 
 import logging
+from datetime import datetime
 from functools import cache
 from pathlib import Path
 
@@ -14,9 +15,14 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 TABLES = ("products", "categories", "promotions", "orders", "order_items", "customers")
 
 
+loaded_at: datetime | None = None  # when the CSVs were read; shown to the customer as "data from"
+
+
 @cache
 def load_tables() -> dict[str, pd.DataFrame]:
     """Read every CSV once; later calls reuse the same DataFrames."""
+    global loaded_at
+    loaded_at = datetime.now()
     return {name: pd.read_csv(DATA_DIR / f"{name}.csv") for name in TABLES}
 
 

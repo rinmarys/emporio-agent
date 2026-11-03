@@ -1,0 +1,107 @@
+/* Empório da Música look on top of Chainlit. Colors come from public/theme.json tokens. */
+
+body {
+  font-family: var(--font-sans);
+}
+
+/* Product tables from the agent: a light card, like the reference. */
+table {
+  border-collapse: separate !important;
+  border-spacing: 0;
+  width: 100%;
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 0.9rem;
+  margin: 0.75rem 0;
+}
+thead th {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+  text-align: left;
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+tbody td {
+  padding: 0.55rem 0.8rem;
+  border-top: 1px solid hsl(var(--border));
+}
+tbody tr:first-child td {
+  border-top: none;
+}
+tbody tr:hover td {
+  background: hsl(var(--accent) / 0.4);
+}
+
+/* "Como cheguei nisso" panel (public/elements/HowIGotHere.jsx). */
+.em-how {
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid hsl(var(--border));
+  font-size: 0.82rem;
+}
+.em-how-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: hsl(var(--muted-foreground));
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.em-how-toggle:hover,
+.em-how-toggle:focus-visible {
+  color: hsl(var(--foreground));
+}
+.em-how-panel {
+  margin-top: 0.6rem;
+  padding: 0.8rem 1rem;
+  background: hsl(var(--muted));
+  border-radius: 10px;
+  display: grid;
+  gap: 0.55rem;
+}
+.em-how-row {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+.em-how-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: hsl(var(--muted-foreground));
+}
+.em-how-val {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  color: hsl(var(--foreground));
+}
+.em-how-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+}
+.em-chip {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+@media (max-width: 640px) {
+  .em-how-row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+}
