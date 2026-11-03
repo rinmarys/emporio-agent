@@ -1,6 +1,5 @@
 langgraph==1.2.19
 langchain==1.4.8
-langchain-google-genai==4.4.2
 langchain-groq==1.1.3
 # chainlit >= 2.9.4 required: earlier versions have known security fixes (D5)
 chainlit==2.12.0

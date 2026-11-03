@@ -18,22 +18,25 @@ class RateLimitedModel(FakeModel):
         yield  # makes this an async generator
 
 
-def test_groq_429_switches_to_gemini_without_waiting(monkeypatch):
-    def fake_build_model(provider="groq", max_retries=2):
-        if provider == "groq":
-            return RateLimitedModel(messages=iter([]))
-        return FakeModel(messages=iter([AIMessage(content="resposta do Gemini")]))
+def test_429_walks_the_fallback_chain_and_last_model_retries_most(monkeypatch):
+    built = []
 
-    monkeypatch.setattr(config, "LLM_PROVIDER", "groq")
-    monkeypatch.setattr(config, "GROQ_API_KEY", "fake")
-    monkeypatch.setattr(config, "GOOGLE_API_KEY", "fake")
+    def fake_build_model(model, max_retries=2):
+        built.append((model, max_retries))
+        if model == "last":
+            return FakeModel(messages=iter([AIMessage(content="resposta do último modelo")]))
+        return RateLimitedModel(messages=iter([]))
+
+    monkeypatch.setattr(config, "GROQ_MODEL", "main")
+    monkeypatch.setattr(config, "GROQ_FALLBACK_MODELS", ["middle", "main", "last"])  # duplicate is skipped
     monkeypatch.setattr(agent, "build_model", fake_build_model)
     agent.get_agent.cache_clear()
     try:
         async def collect():
             return "".join([v async for kind, v in agent.stream("oi", "fallback-test") if kind == "text"])
 
-        assert asyncio.run(collect()) == "resposta do Gemini"
+        assert asyncio.run(collect()) == "resposta do último modelo"
+        assert built == [("main", 1), ("middle", 1), ("last", 2)]
     finally:
         agent.get_agent.cache_clear()  # don't leak the fake agent into other tests
 

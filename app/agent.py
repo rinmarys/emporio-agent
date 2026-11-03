@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelFallbackMiddleware, ModelRequest, dynamic_prompt
 from langchain_core.messages import AIMessageChunk
+from langchain_groq import ChatGroq
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.errors import GraphRecursionError
 
@@ -38,22 +39,18 @@ LOOP_MESSAGE = (
 )
 
 
-def build_model(provider: str = config.LLM_PROVIDER, max_retries: int = 2):
-    """Chat model for the configured provider; switching is one .env variable (D2)."""
-    common = {"temperature": TEMPERATURE, "timeout": 60, "max_retries": max_retries}
-    if provider == "gemini":
-        if not config.GOOGLE_API_KEY:
-            raise RuntimeError("GOOGLE_API_KEY is missing in .env")
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        return ChatGoogleGenerativeAI(model=config.GEMINI_MODEL, api_key=config.GOOGLE_API_KEY, **common)
-    if provider == "groq":
-        if not config.GROQ_API_KEY:
-            raise RuntimeError("GROQ_API_KEY is missing in .env")
-        from langchain_groq import ChatGroq
-
-        return ChatGroq(model=config.GROQ_MODEL, api_key=config.GROQ_API_KEY, **common)
-    raise RuntimeError(f"LLM_PROVIDER must be 'gemini' or 'groq', got {provider!r}")
+def build_model(model: str, max_retries: int = 2):
+    """One Groq chat model (D2). Swapping models is a .env change."""
+    if not config.GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY is missing in .env")
+    return ChatGroq(
+        model=model,
+        api_key=config.GROQ_API_KEY,
+        temperature=TEMPERATURE,
+        timeout=60,
+        max_retries=max_retries,
+        reasoning_format="hidden",  # the model's reasoning must never reach the customer
+    )
 
 
 def store_now() -> datetime:
@@ -74,20 +71,15 @@ def prompt_with_clock(request: ModelRequest) -> str:
 def get_agent():
     """Built once per process. MemorySaver keeps each thread_id's history in RAM (D6)."""
     get_products()  # load the CSVs at startup, not on the first customer question
-    other = "gemini" if config.LLM_PROVIDER == "groq" else "groq"
-    other_key = config.GOOGLE_API_KEY if other == "gemini" else config.GROQ_API_KEY
-    if not other_key:
-        return create_agent(
-            build_model(), tools=TOOLS, middleware=[prompt_with_clock], checkpointer=MemorySaver()
-        )
-    # Free tiers hit 429 often: fail fast on the main provider and switch to the other one,
-    # instead of waiting up to ~40s for the main provider's retry.
-    return create_agent(
-        build_model(max_retries=0),
-        tools=TOOLS,
-        checkpointer=MemorySaver(),
-        middleware=[prompt_with_clock, ModelFallbackMiddleware(build_model(other))],
-    )
+    chain = list(dict.fromkeys([config.GROQ_MODEL, *config.GROQ_FALLBACK_MODELS]))  # no model twice
+    # Free tier quotas are per model (8K tokens/min, ~200K tokens/day each). One retry rides out the
+    # per-minute 429 (Groq asks for seconds); a daily 429 asks for minutes, so the client backs off
+    # ~0.5s and we move to the next model. The last model retries more: nothing left to fall back to.
+    models = [build_model(m, max_retries=1) for m in chain[:-1]] + [build_model(chain[-1])]
+    middleware = [prompt_with_clock]
+    if len(models) > 1:
+        middleware.append(ModelFallbackMiddleware(*models[1:]))
+    return create_agent(models[0], tools=TOOLS, middleware=middleware, checkpointer=MemorySaver())
 
 
 async def stream(message: str, thread_id: str):
@@ -101,6 +93,8 @@ async def stream(message: str, thread_id: str):
             if mode == "updates":
                 for update in data.values():
                     for msg in (update or {}).get("messages", []):
+                        if model := getattr(msg, "response_metadata", {}).get("model_name"):
+                            logger.info("Thread %s answered by %s", thread_id, model)  # shows fallbacks
                         for call in getattr(msg, "tool_calls", None) or []:
                             yield "tool", {"name": call["name"], "args": call["args"]}
             else:
