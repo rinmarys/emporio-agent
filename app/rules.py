@@ -1,5 +1,7 @@
 """Business rules: pure functions, no data access."""
 
+from datetime import datetime, timedelta
+
 LOW_STOCK_LIMIT = 3  # D8-4b: documented assumption, 1..3 units = "últimas unidades"
 
 # Contacts per D8-1 (general phone/WhatsApp + customer service WhatsApp).
@@ -88,6 +90,29 @@ def needs_human(status: str, estimated_delivery, today) -> bool:
     if status in ("delivered", "cancelled") or not estimated_delivery:
         return False
     return estimated_delivery < today
+
+
+# Manual section 2. Monday=0; Sunday has no entry (closed).
+OPENING_HOURS = {0: (9, 18), 1: (9, 18), 2: (9, 18), 3: (9, 18), 4: (9, 18), 5: (9, 13)}
+WEEKDAYS_PT = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"]
+
+
+def store_status(now: datetime) -> str:
+    """Current time and whether the store is open, as one pt-BR line for the system prompt.
+
+    shortcut: holidays are not known (no calendar in the data), add a holiday list if the store provides one.
+    """
+    head = f"Agora: {WEEKDAYS_PT[now.weekday()]}, {now:%d/%m/%Y %H:%M} (horário de Campo Grande/MS)."
+    hours = OPENING_HOURS.get(now.weekday())
+    if hours and hours[0] <= now.hour < hours[1]:
+        return f"{head} A loja está aberta até as {hours[1]}h."
+    for days_ahead in range(8):
+        day = now + timedelta(days=days_ahead)
+        hours = OPENING_HOURS.get(day.weekday())
+        if hours and (days_ahead > 0 or now.hour < hours[0]):
+            when = {0: "hoje", 1: "amanhã"}.get(days_ahead, f"na {WEEKDAYS_PT[day.weekday()]}")
+            return f"{head} A loja está fechada; a equipe volta {when} às {hours[0]}h."
+    return head
 
 
 def order_status_pt(status: str) -> str:

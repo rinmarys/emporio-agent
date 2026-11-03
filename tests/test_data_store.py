@@ -1,10 +1,11 @@
+from datetime import datetime
 import logging
 
 import pandas as pd
 import pytest
 
 from app.data_store import build_products, get_products, load_tables
-from app.rules import UNKNOWN_AVAILABILITY, availability, order_status_pt, payment_method_pt
+from app.rules import UNKNOWN_AVAILABILITY, availability, order_status_pt, payment_method_pt, store_status
 
 
 def product(name_part: str):
@@ -97,3 +98,17 @@ def test_pt_br_translations_cover_all_values_in_data():
         assert order_status_pt(status) != status
     for method in orders["payment_method"].unique():
         assert payment_method_pt(method) != method
+
+
+@pytest.mark.parametrize(
+    "when, expected",
+    [
+        (datetime(2026, 11, 3, 14, 0), "aberta até as 18h"),  # Tuesday afternoon
+        (datetime(2026, 11, 3, 18, 0), "volta amanhã às 9h"),  # Tuesday, closing time
+        (datetime(2026, 11, 2, 7, 30), "volta hoje às 9h"),  # Monday before opening
+        (datetime(2026, 11, 7, 14, 0), "volta na segunda-feira às 9h"),  # Saturday after 13h
+        (datetime(2026, 11, 8, 22, 0), "volta amanhã às 9h"),  # Sunday night
+    ],
+)
+def test_store_status_knows_when_the_team_is_back(when, expected):
+    assert expected in store_status(when)
