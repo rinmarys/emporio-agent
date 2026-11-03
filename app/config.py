@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq").strip().lower()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
