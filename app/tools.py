@@ -86,6 +86,11 @@ def search_products(
     if max_price is not None:
         mask &= products["price_brl"] <= max_price
     matches = products[mask]
+    if matches.empty and query and category:
+        # The model sometimes guesses the category of a named product wrong ("Takamine GD20" -> Guitarras).
+        result = search_products.func(query=query, max_price=max_price, only_available=only_available)
+        result["note"] = f"nenhum produto em '{category}'; resultados de outras categorias"
+        return result
 
     if only_available and matches["availability"].isin(SELLABLE).any():
         matches = matches[matches["availability"].isin(SELLABLE)]

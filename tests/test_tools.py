@@ -20,6 +20,14 @@ def test_search_ignores_accents_and_case():
     assert all(p["category"] == "Violões" for p in search(category="violoes")["products"])
 
 
+def test_named_product_is_found_even_with_a_wrong_category():
+    # T10 scenario 01: the model passed category "Guitarras" for a violão.
+    result = search(query="Takamine GD20", category="Guitarras", only_available=False)
+    [gd20] = result["products"]
+    assert gd20["category"] == "Violões"
+    assert "Guitarras" in result["note"]  # the model must know the category was dropped
+
+
 def test_unknown_category_returns_real_names_instead_of_not_found():
     result = search(category="Violão")  # singular: not inside "Violões"
     assert result["message"] == "categoria não encontrada"
